@@ -7,4 +7,4 @@
 
 ## Dependencies
 * Requires the ```vb_sim``` package (git clone from eyantra's repo)
-* Requires UR5 configuration package
+* Requires UR5 configuration ```pkg_moveit_ur5_1``` package 
