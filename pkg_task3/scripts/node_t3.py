@@ -10,6 +10,7 @@ import geometry_msgs.msg
 import actionlib
 
 from pkg_vb_sim.srv import *
+from hrwros_gazebo.msg import LogicalCameraImage
 
 
 class CartesianPath:
@@ -37,6 +38,20 @@ class CartesianPath:
 
         rospy.loginfo('\033[94m' + " >>> Init done." + '\033[0m')
 
+        self.logical_camera_subscriber = rospy.Subscriber('eyrc/vb/logical_camera_2', LogicalCameraImage, self.update_camera)
+        self.logical_camera = LogicalCameraImage()
+
+        #Access Logical Camera(package cordinates) in main function through these variables
+        self.cam_y = -999
+
+        
+    def update_camera(self,data):
+        self.logical_camera = data 
+        # Conditions for ignoring the cordinates of arm which is detected by Logical Camera 
+        if (len(self.logical_camera.models)>0 and self.logical_camera.models[0].type != "ur5"):
+            self.cam_y = round((self.logical_camera.models[0].pose.position.y),2)
+        elif(len(self.logical_camera.models)>1 and self.logical_camera.models[0].type == "ur5"):
+            self.cam_y = round((self.logical_camera.models[1].pose.position.y),2)
 
     def ee_cartesian_translation(self, trans_x, trans_y, trans_z):
         # 1. Create a empty list to hold waypoints
@@ -56,10 +71,8 @@ class CartesianPath:
         wpose.orientation.z = 0.5
         wpose.orientation.w = 0.5
 
-
         # 4. Add the new waypoint to the list of waypoints
         waypoints.append(copy.deepcopy(wpose))
-
 
         # 5. Compute Cartesian Path connecting the waypoints in the list of waypoints
         (plan, fraction) = self._group.compute_cartesian_path(
@@ -119,8 +132,8 @@ class CartesianPath:
         gripper_obj.activate_vacuum_gripper = option
         result = gripper_service(gripper_obj)
         print(result)
-
-
+    
+    
     # Destructor
     def __del__(self):
         moveit_commander.roscpp_shutdown()
@@ -146,8 +159,16 @@ def main():
     ur5_2_home_pose.orientation.z = 0.5
     ur5_2_home_pose.orientation.w = 0.5
 
+    
+    ur5.conveyor_power(20)
+    ur5.go_to_pose(ur5_2_home_pose)
     while not rospy.is_shutdown():
-        
+        # To Stop the Conveyor when package is exactly below the Logical Camera
+        if(ur5.cam_y == 0.00):
+            ur5.conveyor_power(0)
+            break
+    
+
         #ur5.go_to_pose(ur5_2_home_pose)
         
         
@@ -177,7 +198,7 @@ def main():
         # rospy.loginfo('\033[96m' + "Enter 'n' to go to home pose." + '\033[0m')
         # inp = raw_input()
         
-        break
+        #break
         
     del ur5
 
