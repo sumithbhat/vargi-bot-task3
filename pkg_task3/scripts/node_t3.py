@@ -47,11 +47,12 @@ class CartesianPath:
         
     def update_camera(self,data):
         self.logical_camera = data 
-        # Conditions for ignoring the cordinates of arm which is detected by Logical Camera 
-        if (len(self.logical_camera.models)>0 and self.logical_camera.models[0].type != "ur5"):
-            self.cam_y = round((self.logical_camera.models[0].pose.position.y),2)
-        elif(len(self.logical_camera.models)>1 and self.logical_camera.models[0].type == "ur5"):
-            self.cam_y = round((self.logical_camera.models[1].pose.position.y),2)
+        if(len(self.logical_camera.models) == 1 and self.logical_camera.models[0].type != "ur5"):
+            self.cam_y = round((self.logical_camera.models[0].pose.position.y),1)
+        elif(len(self.logical_camera.models) > 1 and self.logical_camera.models[0].type == "ur5"):
+            self.cam_y = round((self.logical_camera.models[1].pose.position.y),1)
+        elif(len(self.logical_camera.models) > 1 and self.logical_camera.models[0].type != "ur5"):
+            self.cam_y = round((self.logical_camera.models[0].pose.position.y),1)
 
     def ee_cartesian_translation(self, trans_x, trans_y, trans_z):
         # 1. Create a empty list to hold waypoints
