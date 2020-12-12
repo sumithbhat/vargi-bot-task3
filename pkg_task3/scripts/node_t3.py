@@ -12,6 +12,9 @@ import actionlib
 from pkg_vb_sim.srv import *
 from hrwros_gazebo.msg import LogicalCameraImage
 
+import tf2_ros
+import tf2_msgs.msg
+
 
 class CartesianPath:
 
@@ -41,10 +44,16 @@ class CartesianPath:
         self.logical_camera_subscriber = rospy.Subscriber('eyrc/vb/logical_camera_2', LogicalCameraImage, self.update_camera)
         self.logical_camera = LogicalCameraImage()
 
-        #Access Logical Camera(package cordinates) in main function through these variables
         self.cam_y = -999
 
+        self._tfBuffer = tf2_ros.Buffer()
+        self._listener = tf2_ros.TransformListener(self._tfBuffer)
+
+        self.tf_offset_x = 0
+        self.tf_offset_y = 0
+        self.tf_offset_z = 0
         
+
     def update_camera(self,data):
         self.logical_camera = data 
         if(len(self.logical_camera.models) == 1 and self.logical_camera.models[0].type != "ur5"):
@@ -53,6 +62,73 @@ class CartesianPath:
             self.cam_y = round((self.logical_camera.models[1].pose.position.y),1)
         elif(len(self.logical_camera.models) > 1 and self.logical_camera.models[0].type != "ur5"):
             self.cam_y = round((self.logical_camera.models[0].pose.position.y),1)
+
+
+    def func_get_tf(self, arg_frame_1, arg_frame_2):
+        try:
+            trans = self._tfBuffer.lookup_transform(arg_frame_1, arg_frame_2, rospy.Time())
+            self.tf_translation_x = trans.transform.translation.x
+            self.tf_translation_y = trans.transform.translation.y
+            self.tf_translation_z = trans.transform.translation.z
+
+            self.tf_offset_x = - self.tf_translation_z
+            self.tf_offset_y = self.tf_translation_x
+            self.tf_offset_z = - (self.tf_translation_y - 0.19)
+            
+            # rospy.loginfo(  "\n" +
+            #                 "Translation: \n" +
+            #                 "x: {} \n".format(trans.transform.translation.x) +
+            #                 "y: {} \n".format(trans.transform.translation.y) +
+            #                 "z: {} \n".format(trans.transform.translation.z) +
+            #                 "\n" +
+            #                 "Orientation: \n" +
+            #                 "x: {} \n".format(trans.transform.rotation.x) +
+            #                 "y: {} \n".format(trans.transform.rotation.y) +
+            #                 "z: {} \n".format(trans.transform.rotation.z) +
+            #                 "w: {} \n".format(trans.transform.rotation.w) )
+
+        except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
+            rospy.logerr("TF error")
+
+
+    def go_to_predefined_pose(self, arg_pose_name): # {"straightUp", "allZeros"}
+        rospy.loginfo('\033[94m' + "Going to Pose: {}".format(arg_pose_name) + '\033[0m')
+        self._group.set_named_target(arg_pose_name)
+        plan = self._group.plan()
+        goal = moveit_msgs.msg.ExecuteTrajectoryGoal()
+        goal.trajectory = plan
+        self._exectute_trajectory_client.send_goal(goal)
+        self._exectute_trajectory_client.wait_for_result()
+        rospy.loginfo('\033[94m' + "Now at Pose: {}".format(arg_pose_name) + '\033[0m')
+    
+
+    def set_joint_angles(self, arg_list_joint_angles):
+
+        list_joint_values = self._group.get_current_joint_values()
+        rospy.loginfo('\033[94m' + ">>> Current Joint Values:" + '\033[0m')
+        rospy.loginfo(list_joint_values)
+
+        self._group.set_joint_value_target(arg_list_joint_angles)
+        self._group.plan()
+        flag_plan = self._group.go(wait=True)
+
+        list_joint_values = self._group.get_current_joint_values()
+        rospy.loginfo('\033[94m' + ">>> Final Joint Values:" + '\033[0m')
+        rospy.loginfo(list_joint_values)
+
+        pose_values = self._group.get_current_pose().pose
+        rospy.loginfo('\033[94m' + ">>> Final Pose:" + '\033[0m')
+        rospy.loginfo(pose_values)
+
+        if (flag_plan == True):
+            rospy.loginfo(
+                '\033[94m' + ">>> set_joint_angles() Success" + '\033[0m')
+        else:
+            rospy.logerr(
+                '\033[94m' + ">>> set_joint_angles() Failed." + '\033[0m')
+
+        return flag_plan
+
 
     def ee_cartesian_translation(self, trans_x, trans_y, trans_z):
         # 1. Create a empty list to hold waypoints
@@ -72,8 +148,10 @@ class CartesianPath:
         wpose.orientation.z = 0.5
         wpose.orientation.w = 0.5
 
+
         # 4. Add the new waypoint to the list of waypoints
         waypoints.append(copy.deepcopy(wpose))
+
 
         # 5. Compute Cartesian Path connecting the waypoints in the list of waypoints
         (plan, fraction) = self._group.compute_cartesian_path(
@@ -118,7 +196,8 @@ class CartesianPath:
 
         return flag_plan
 
-    def conveyor_power(self, arg_power):  # arg_power= [11,100] for start, 0 for stop
+
+    def conveyor_power(self, arg_power):  # {0, [11,100]}
         rospy.wait_for_service('/eyrc/vb/conveyor/set_power')
         conveyor_service = rospy.ServiceProxy('/eyrc/vb/conveyor/set_power',conveyorBeltPowerMsg)
         conveyor_obj = conveyorBeltPowerMsgRequest()
@@ -126,7 +205,8 @@ class CartesianPath:
         result = conveyor_service(conveyor_obj)
         print(result)
 
-    def activate_gripper(self, option):  # option=True for activate, False for deactivate
+
+    def activate_gripper(self, option):  # {True, False}
         rospy.wait_for_service('/eyrc/vb/ur5_1/activate_vacuum_gripper')
         gripper_service = rospy.ServiceProxy('/eyrc/vb/ur5_1/activate_vacuum_gripper',vacuumGripper)
         gripper_obj = vacuumGripperRequest()
@@ -134,9 +214,8 @@ class CartesianPath:
         result = gripper_service(gripper_obj)
         print(result)
     
-    
-    # Destructor
-    def __del__(self):
+
+    def __del__(self):  # Destructor
         moveit_commander.roscpp_shutdown()
         rospy.loginfo(
             '\033[94m' + "Object of class CartesianPath Deleted." + '\033[0m')
@@ -160,47 +239,51 @@ def main():
     ur5_2_home_pose.orientation.z = 0.5
     ur5_2_home_pose.orientation.w = 0.5
 
-    
-    ur5.conveyor_power(20)
+    ur5.conveyor_power(30)
     ur5.go_to_pose(ur5_2_home_pose)
+
     while not rospy.is_shutdown():
-        # To Stop the Conveyor when package is exactly below the Logical Camera
-        if(ur5.cam_y == 0.00):
+        if(ur5.cam_y == 0.0):
             ur5.conveyor_power(0)
+            rospy.loginfo("Red package detected")
             break
     
+    ur5.activate_gripper(True)
+    ur5.ee_cartesian_translation(0.8, 0.5, 0)
+    ur5.activate_gripper(False)
 
-        #ur5.go_to_pose(ur5_2_home_pose)
-        
-        
-        # 1. Go to Home Position
-        #ur5.go_to_pose(ur5_2_home_pose)
-        #rospy.loginfo('\033[96m' + "Enter 'n' to go to next pose." + '\033[0m')
-        # inp = raw_input()
+    ur5.conveyor_power(20)
+    ur5.go_to_pose(ur5_2_home_pose)
 
-        # # 2. Translate EE by 0.5m  in x
-        # rospy.loginfo('\033[94m' + "Translating EE by 0.5m in x from current position." + '\033[0m')
-        # ur5.ee_cartesian_translation(0.5, 0, 0)
+    while not rospy.is_shutdown():
+        if(ur5.cam_y == 0.0):
+            ur5.conveyor_power(0)
+            rospy.loginfo("Green package detected")
+            break
+    ur5.func_get_tf("ur5_wrist_3_link","logical_camera_2_packagen2_frame")
+    ur5.ee_cartesian_translation(ur5.tf_offset_x, ur5.tf_offset_y, ur5.tf_offset_z)
 
-        # rospy.loginfo('\033[96m' + "Enter 'n' to go to next pose." + '\033[0m')
-        # inp = raw_input()
-        
-        # # 3. Translate EE by 0.5m  in y
-        # rospy.loginfo('\033[94m' + "Translating EE by 0.5m in y from current position." + '\033[0m')
-        # ur5.ee_cartesian_translation(0, 0.5, 0)
+    ur5.activate_gripper(True)
+    ur5.ee_cartesian_translation(0.8, 0.5, 0)
+    ur5.ee_cartesian_translation(0.8, -0.5, 0)
 
-        # rospy.loginfo('\033[96m' + "Enter 'n' to go to next pose." + '\033[0m')
-        # inp = raw_input()
-        
-        # # 4. Translate EE by 0.5m  in z
-        # rospy.loginfo('\033[94m' + "Translating EE by 0.5m in z from current position." + '\033[0m')
-        # ur5.ee_cartesian_translation(0, 0, 0.5)
+    ur5.activate_gripper(False)
 
-        # rospy.loginfo('\033[96m' + "Enter 'n' to go to home pose." + '\033[0m')
-        # inp = raw_input()
-        
-        #break
-        
+    ur5.conveyor_power(20)
+    ur5.go_to_pose(ur5_2_home_pose)
+
+    while not rospy.is_shutdown():
+        if(ur5.cam_y == 0.0):
+            ur5.conveyor_power(0)
+            rospy.loginfo("Blue package detected")
+            break
+    ur5.func_get_tf("ur5_wrist_3_link","logical_camera_2_packagen3_frame")
+    ur5.ee_cartesian_translation(ur5.tf_offset_x, ur5.tf_offset_y, ur5.tf_offset_z)
+
+    ur5.activate_gripper(True)
+    ur5.ee_cartesian_translation(0.8, -0.5, 0)
+    ur5.activate_gripper(False)
+
     del ur5
 
 
