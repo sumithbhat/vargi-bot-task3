@@ -66,7 +66,8 @@ class CartesianPath:
     def send_goal(self, arg_dest):
 
         # Create Goal message for Simple Action Server
-        goal = myActionMsgGoal(destination=arg_dest)
+        goal = myActionMsgGoal()
+        goal.destination = arg_dest
         self._ac.send_goal(goal, done_cb=self.done_callback,
                            feedback_cb=self.feedback_callback)
         rospy.loginfo("Goal has been sent.")
@@ -103,34 +104,6 @@ class CartesianPath:
         except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
             rospy.logerr("TF error")
     
-
-    def set_joint_angles(self, arg_list_joint_angles):
-
-        list_joint_values = self._group.get_current_joint_values()
-        rospy.loginfo('\033[94m' + ">>> Current Joint Values:" + '\033[0m')
-        rospy.loginfo(list_joint_values)
-
-        self._group.set_joint_value_target(arg_list_joint_angles)
-        self._group.plan()
-        flag_plan = self._group.go(wait=True)
-
-        list_joint_values = self._group.get_current_joint_values()
-        rospy.loginfo('\033[94m' + ">>> Final Joint Values:" + '\033[0m')
-        rospy.loginfo(list_joint_values)
-
-        pose_values = self._group.get_current_pose().pose
-        rospy.loginfo('\033[94m' + ">>> Final Pose:" + '\033[0m')
-        rospy.loginfo(pose_values)
-
-        if (flag_plan == True):
-            rospy.loginfo(
-                '\033[94m' + ">>> set_joint_angles() Success" + '\033[0m')
-        else:
-            rospy.logerr(
-                '\033[94m' + ">>> set_joint_angles() Failed." + '\033[0m')
-
-        return flag_plan
-
 
     def ee_cartesian_translation(self, trans_x, trans_y, trans_z):
         # 1. Create a empty list to hold waypoints
@@ -241,7 +214,7 @@ def main():
     ur5_2_home_pose.orientation.w = 0.5
 
     ur5.go_to_pose(ur5_2_home_pose)
-    ur5.conveyor_power(55)
+    ur5.conveyor_power(60)
 
     while not rospy.is_shutdown():
         if(ur5.cam_y == 0.0):
@@ -254,8 +227,8 @@ def main():
     ur5.ee_cartesian_translation(0.8, 0.5, 0.1)
     ur5.activate_gripper(False)
 
-    ur5.send_goal("ur5_2_home_pose")
-    ur5.conveyor_power(50)
+    ur5.send_goal("home_use_joint_angles")
+    ur5.conveyor_power(60)
 
     while not rospy.is_shutdown():
         if(ur5.cam_y == 0.0):
@@ -270,11 +243,11 @@ def main():
     ur5.goal_complete = False  
     ur5.activate_gripper(True)
     # Move to Green Basket
-    ur5.ee_cartesian_translation(0.8, 0.4, 0.1)
-    ur5.ee_cartesian_translation(0.6, -0.4, 0)
+    ur5.ee_cartesian_translation(0.7, 0.4, 0.2)
+    ur5.ee_cartesian_translation(0.8, -0.4, 0)
     ur5.activate_gripper(False)
 
-    ur5.send_goal("ur5_2_home_pose")
+    ur5.send_goal("home_use_joint_angles")
     ur5.conveyor_power(40)
 
     while not rospy.is_shutdown():
@@ -288,10 +261,9 @@ def main():
             ur5.ee_cartesian_translation(ur5.tf_offset_x, ur5.tf_offset_y, ur5.tf_offset_z)
             break
     ur5.goal_complete = False
-    rospy.loginfo("Attaching blue box")
     ur5.activate_gripper(True)
-    ur5.ee_cartesian_translation(0.7,-0.5,0.2)
-    rospy.loginfo("Detaching blue box")
+    # Move to Blue Basket
+    ur5.ee_cartesian_translation(0.8,-0.5,0.2)
     ur5.activate_gripper(False)
 
 
