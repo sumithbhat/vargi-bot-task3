@@ -1,0 +1,8 @@
+# goal
+string destination
+---
+# result
+bool complete
+---
+# feedback
+int8 percentage_complete
