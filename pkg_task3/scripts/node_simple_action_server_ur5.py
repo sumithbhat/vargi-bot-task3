@@ -7,6 +7,7 @@ import moveit_commander
 import moveit_msgs.msg
 import geometry_msgs.msg
 import actionlib
+import math
 
 from pkg_task3.msg import myActionMsgAction
 from pkg_task3.msg import myActionMsgGoal
@@ -51,6 +52,13 @@ class SimpleActionServerUr5:
         self.ur5_2_home_pose.orientation.y = -0.5
         self.ur5_2_home_pose.orientation.z = 0.5
         self.ur5_2_home_pose.orientation.w = 0.5
+
+        self.lst_joint_angles = [math.radians(6),
+                          math.radians(-139),
+                          math.radians(-63),
+                          math.radians(-66),
+                          math.radians(90),
+                          math.radians(0)]
         
         # Start the Action Server
         self._sas.start()
@@ -81,6 +89,35 @@ class SimpleActionServerUr5:
                 '\033[94m' + ">>> go_to_pose() Failed. Solution for Pose not Found." + '\033[0m')
 
         return flag_plan
+    
+
+    def set_joint_angles(self, arg_list_joint_angles):
+
+        list_joint_values = self._group.get_current_joint_values()
+        rospy.loginfo('\033[94m' + ">>> Current Joint Values:" + '\033[0m')
+        rospy.loginfo(list_joint_values)
+
+        self._group.set_joint_value_target(arg_list_joint_angles)
+        self._group.plan()
+        flag_plan = self._group.go(wait=True)
+
+        list_joint_values = self._group.get_current_joint_values()
+        rospy.loginfo('\033[94m' + ">>> Final Joint Values:" + '\033[0m')
+        rospy.loginfo(list_joint_values)
+
+        pose_values = self._group.get_current_pose().pose
+        rospy.loginfo('\033[94m' + ">>> Final Pose:" + '\033[0m')
+        rospy.loginfo(pose_values)
+
+        if (flag_plan == True):
+            rospy.loginfo(
+                '\033[94m' + ">>> set_joint_angles() Success" + '\033[0m')
+        else:
+            rospy.logerr(
+                '\033[94m' + ">>> set_joint_angles() Failed." + '\033[0m')
+
+        return flag_plan
+    
 
     # Function to process Goals and send Results
     def func_on_rx_goal(self, obj_msg_goal):
@@ -91,12 +128,11 @@ class SimpleActionServerUr5:
         flag_preempted = False      # Set to True if Cancel req is sent by Client
 
         # --- Goal Processing Section ---
-        obj_msg_feedback = myActionMsgFeedback()
-        obj_msg_feedback.percentage_complete = 0
-        self._sas.publish_feedback(obj_msg_feedback)
-        self.go_to_pose(self.ur5_2_home_pose)
+        if(obj_msg_goal.destination == "home_use_pose"):
+            self.go_to_pose(self.ur5_2_home_pose)
+        elif(obj_msg_goal.destination == "home_use_joint_angles"):
+            self.set_joint_angles(self.lst_joint_angles)
 
-        
         # Send Result to the Client
         obj_msg_result = myActionMsgResult()
         obj_msg_result.complete = True
