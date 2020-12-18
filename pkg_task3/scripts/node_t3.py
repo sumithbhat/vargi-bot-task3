@@ -8,12 +8,16 @@ import moveit_commander
 import moveit_msgs.msg
 import geometry_msgs.msg
 import actionlib
+import time
 
 from pkg_vb_sim.srv import *
 from hrwros_gazebo.msg import LogicalCameraImage
 
 import tf2_ros
 import tf2_msgs.msg
+
+from pkg_task3.msg import myActionMsgAction
+from pkg_task3.msg import myActionMsgGoal
 
 
 class CartesianPath:
@@ -22,6 +26,10 @@ class CartesianPath:
     def __init__(self):
 
         rospy.init_node('node_eg5_waypoints', anonymous=True)
+        self._ac = actionlib.SimpleActionClient('/action_ur5',
+                                                myActionMsgAction)
+        self._ac.wait_for_server()
+        rospy.loginfo("Action server is up, we can send new goals!")
 
         self._planning_group = "ur5_1_planning_group"
         self._commander = moveit_commander.roscpp_initialize(sys.argv)
@@ -45,6 +53,7 @@ class CartesianPath:
         self.logical_camera = LogicalCameraImage()
 
         self.cam_y = -999
+        self.goal_complete = False
 
         self._tfBuffer = tf2_ros.Buffer()
         self._listener = tf2_ros.TransformListener(self._tfBuffer)
@@ -53,6 +62,22 @@ class CartesianPath:
         self.tf_offset_y = 0
         self.tf_offset_z = 0
         
+    # Function to send Goals to Action Server
+    def send_goal(self, arg_dest):
+
+        # Create Goal message for Simple Action Server
+        goal = myActionMsgGoal(destination=arg_dest)
+        self._ac.send_goal(goal, done_cb=self.done_callback,
+                           feedback_cb=self.feedback_callback)
+        rospy.loginfo("Goal has been sent.")
+    
+    # Function print result on Goal completion
+    def done_callback(self, status, result):
+        self.goal_complete = True 
+
+    # Function to print feedback while Goal is being processed
+    def feedback_callback(self, feedback):
+        pass
 
     def update_camera(self,data):
         self.logical_camera = data 
@@ -74,32 +99,9 @@ class CartesianPath:
             self.tf_offset_x = - self.tf_translation_z
             self.tf_offset_y = self.tf_translation_x
             self.tf_offset_z = - (self.tf_translation_y - 0.19)
-            
-            # rospy.loginfo(  "\n" +
-            #                 "Translation: \n" +
-            #                 "x: {} \n".format(trans.transform.translation.x) +
-            #                 "y: {} \n".format(trans.transform.translation.y) +
-            #                 "z: {} \n".format(trans.transform.translation.z) +
-            #                 "\n" +
-            #                 "Orientation: \n" +
-            #                 "x: {} \n".format(trans.transform.rotation.x) +
-            #                 "y: {} \n".format(trans.transform.rotation.y) +
-            #                 "z: {} \n".format(trans.transform.rotation.z) +
-            #                 "w: {} \n".format(trans.transform.rotation.w) )
 
         except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
             rospy.logerr("TF error")
-
-
-    def go_to_predefined_pose(self, arg_pose_name): # {"straightUp", "allZeros"}
-        rospy.loginfo('\033[94m' + "Going to Pose: {}".format(arg_pose_name) + '\033[0m')
-        self._group.set_named_target(arg_pose_name)
-        plan = self._group.plan()
-        goal = moveit_msgs.msg.ExecuteTrajectoryGoal()
-        goal.trajectory = plan
-        self._exectute_trajectory_client.send_goal(goal)
-        self._exectute_trajectory_client.wait_for_result()
-        rospy.loginfo('\033[94m' + "Now at Pose: {}".format(arg_pose_name) + '\033[0m')
     
 
     def set_joint_angles(self, arg_list_joint_angles):
@@ -227,7 +229,6 @@ def main():
     box_length = 0.15               # Length of the Package
     vacuum_gripper_width = 0.115    # Vacuum Gripper Width
     delta = vacuum_gripper_width + (box_length/2)  # 0.19
-    # Teams may use this info in Tasks
 
     ur5_2_home_pose = geometry_msgs.msg.Pose()
     ur5_2_home_pose.position.x = -0.8
@@ -239,8 +240,8 @@ def main():
     ur5_2_home_pose.orientation.z = 0.5
     ur5_2_home_pose.orientation.w = 0.5
 
-    ur5.conveyor_power(30)
     ur5.go_to_pose(ur5_2_home_pose)
+    ur5.conveyor_power(55)
 
     while not rospy.is_shutdown():
         if(ur5.cam_y == 0.0):
@@ -249,40 +250,50 @@ def main():
             break
     
     ur5.activate_gripper(True)
-    ur5.ee_cartesian_translation(0.8, 0.5, 0)
+    # Move to Red Basket
+    ur5.ee_cartesian_translation(0.8, 0.5, 0.1)
     ur5.activate_gripper(False)
 
-    ur5.conveyor_power(20)
-    ur5.go_to_pose(ur5_2_home_pose)
+    ur5.send_goal("ur5_2_home_pose")
+    ur5.conveyor_power(50)
 
     while not rospy.is_shutdown():
         if(ur5.cam_y == 0.0):
             ur5.conveyor_power(0)
             rospy.loginfo("Green package detected")
             break
-    ur5.func_get_tf("ur5_wrist_3_link","logical_camera_2_packagen2_frame")
-    ur5.ee_cartesian_translation(ur5.tf_offset_x, ur5.tf_offset_y, ur5.tf_offset_z)
-
+    while not rospy.is_shutdown():
+        if(ur5.goal_complete == True):
+            ur5.func_get_tf("ur5_wrist_3_link","logical_camera_2_packagen2_frame")
+            ur5.ee_cartesian_translation(ur5.tf_offset_x, ur5.tf_offset_y, ur5.tf_offset_z)
+            break
+    ur5.goal_complete = False  
     ur5.activate_gripper(True)
-    ur5.ee_cartesian_translation(0.8, 0.5, 0)
-    ur5.ee_cartesian_translation(0.8, -0.5, 0)
-
+    # Move to Green Basket
+    ur5.ee_cartesian_translation(0.8, 0.4, 0.1)
+    ur5.ee_cartesian_translation(0.6, -0.4, 0)
     ur5.activate_gripper(False)
 
-    ur5.conveyor_power(20)
-    ur5.go_to_pose(ur5_2_home_pose)
+    ur5.send_goal("ur5_2_home_pose")
+    ur5.conveyor_power(40)
 
     while not rospy.is_shutdown():
         if(ur5.cam_y == 0.0):
             ur5.conveyor_power(0)
             rospy.loginfo("Blue package detected")
             break
-    ur5.func_get_tf("ur5_wrist_3_link","logical_camera_2_packagen3_frame")
-    ur5.ee_cartesian_translation(ur5.tf_offset_x, ur5.tf_offset_y, ur5.tf_offset_z)
-
+    while not rospy.is_shutdown():
+        if(ur5.goal_complete == True):
+            ur5.func_get_tf("ur5_wrist_3_link","logical_camera_2_packagen3_frame")
+            ur5.ee_cartesian_translation(ur5.tf_offset_x, ur5.tf_offset_y, ur5.tf_offset_z)
+            break
+    ur5.goal_complete = False
+    rospy.loginfo("Attaching blue box")
     ur5.activate_gripper(True)
-    ur5.ee_cartesian_translation(0.8, -0.5, 0)
+    ur5.ee_cartesian_translation(0.7,-0.5,0.2)
+    rospy.loginfo("Detaching blue box")
     ur5.activate_gripper(False)
+
 
     del ur5
 
