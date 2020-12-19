@@ -13,6 +13,9 @@
         <arg name="rviz_config" value="$(find pkg_moveit_ur5_1)/launch/moveit.rviz"/>
     </include>
 
-    <!-- This node is for controlling the UR5 -->
+    <!-- This node is acting as a Simple Action Server for controlling the UR5 -->
+    <node pkg="pkg_task3" type="node_simple_action_server_ur5.py" name="node_simple_action_server_ur5" output="screen" />
+    <!-- This node is acting as a Simple Action Client and for controlling the Conveyor Belt -->
+    <node pkg="pkg_task3" type="node_simple_action_server_ur5.py" name="node_simple_action_server_ur5" output="screen" />
 
 </launch>
