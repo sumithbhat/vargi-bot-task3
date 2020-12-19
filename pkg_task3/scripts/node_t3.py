@@ -9,6 +9,7 @@ import moveit_msgs.msg
 import geometry_msgs.msg
 import actionlib
 import time
+import math
 
 from pkg_vb_sim.srv import *
 from hrwros_gazebo.msg import LogicalCameraImage
@@ -145,7 +146,35 @@ class CartesianPath:
         # 6. Make the arm follow the Computed Cartesian Path
         self._group.execute(plan)
 
-    
+
+    def set_joint_angles(self, arg_list_joint_angles):
+
+        list_joint_values = self._group.get_current_joint_values()
+        rospy.loginfo('\033[94m' + ">>> Current Joint Values:" + '\033[0m')
+        rospy.loginfo(list_joint_values)
+
+        self._group.set_joint_value_target(arg_list_joint_angles)
+        self._group.plan()
+        flag_plan = self._group.go(wait=True)
+
+        list_joint_values = self._group.get_current_joint_values()
+        rospy.loginfo('\033[94m' + ">>> Final Joint Values:" + '\033[0m')
+        rospy.loginfo(list_joint_values)
+
+        pose_values = self._group.get_current_pose().pose
+        rospy.loginfo('\033[94m' + ">>> Final Pose:" + '\033[0m')
+        rospy.loginfo(pose_values)
+
+        if (flag_plan == True):
+            rospy.loginfo(
+                '\033[94m' + ">>> set_joint_angles() Success" + '\033[0m')
+        else:
+            rospy.logerr(
+                '\033[94m' + ">>> set_joint_angles() Failed." + '\033[0m')
+
+        return flag_plan
+
+
     def go_to_pose(self, arg_pose):
 
         pose_values = self._group.get_current_pose().pose
@@ -212,19 +241,31 @@ def main():
     ur5_2_home_pose.orientation.y = -0.5
     ur5_2_home_pose.orientation.z = 0.5
     ur5_2_home_pose.orientation.w = 0.5
+    #ur5.go_to_pose(ur5_2_home_pose)
 
-    ur5.go_to_pose(ur5_2_home_pose)
+    ur5.send_goal("home_use_joint_angles")
+    rospy.sleep(5)
     ur5.conveyor_power(60)
 
     while not rospy.is_shutdown():
         if(ur5.cam_y == 0.0):
+            # Red package detected
             ur5.conveyor_power(0)
-            rospy.loginfo("Red package detected")
             break
     
+    ur5.func_get_tf("ur5_wrist_3_link","logical_camera_2_packagen1_frame")
+    ur5.ee_cartesian_translation(ur5.tf_offset_x, ur5.tf_offset_y, ur5.tf_offset_z)
+    ur5.goal_complete = False   
+    
     ur5.activate_gripper(True)
-    # Move to Red Basket
-    ur5.ee_cartesian_translation(0.8, 0.5, 0.1)
+    # Go to Red Basket
+    lst_joint_angles_red = [math.radians(-75),
+                          math.radians(-120),
+                          math.radians(-63),
+                          math.radians(-66),
+                          math.radians(90),
+                          math.radians(0)]
+    ur5.set_joint_angles(lst_joint_angles_red)
     ur5.activate_gripper(False)
 
     ur5.send_goal("home_use_joint_angles")
@@ -232,40 +273,54 @@ def main():
 
     while not rospy.is_shutdown():
         if(ur5.cam_y == 0.0):
+            # Green package detected
             ur5.conveyor_power(0)
-            rospy.loginfo("Green package detected")
             break
     while not rospy.is_shutdown():
         if(ur5.goal_complete == True):
             ur5.func_get_tf("ur5_wrist_3_link","logical_camera_2_packagen2_frame")
             ur5.ee_cartesian_translation(ur5.tf_offset_x, ur5.tf_offset_y, ur5.tf_offset_z)
+            ur5.goal_complete = False  
             break
-    ur5.goal_complete = False  
+    
     ur5.activate_gripper(True)
-    # Move to Green Basket
-    ur5.ee_cartesian_translation(0.7, 0.4, 0.2)
-    ur5.ee_cartesian_translation(0.8, -0.4, 0)
+    # Go to Green Basket
+    lst_joint_angles_green = [math.radians(-10),
+                          math.radians(-45),
+                          math.radians(0),
+                          math.radians(0),
+                          math.radians(0),
+                          math.radians(0)]
+    ur5.set_joint_angles(lst_joint_angles_green)
     ur5.activate_gripper(False)
 
     ur5.send_goal("home_use_joint_angles")
-    ur5.conveyor_power(40)
+    ur5.conveyor_power(60)
 
     while not rospy.is_shutdown():
         if(ur5.cam_y == 0.0):
+            # Blue package detected
             ur5.conveyor_power(0)
-            rospy.loginfo("Blue package detected")
             break
     while not rospy.is_shutdown():
         if(ur5.goal_complete == True):
             ur5.func_get_tf("ur5_wrist_3_link","logical_camera_2_packagen3_frame")
             ur5.ee_cartesian_translation(ur5.tf_offset_x, ur5.tf_offset_y, ur5.tf_offset_z)
+            ur5.goal_complete = False
             break
-    ur5.goal_complete = False
+    
     ur5.activate_gripper(True)
-    # Move to Blue Basket
-    ur5.ee_cartesian_translation(0.8,-0.5,0.2)
+    # Go to Blue Basket
+    lst_joint_angles_blue = [math.radians(90),
+                          math.radians(-120),
+                          math.radians(-63),
+                          math.radians(-66),
+                          math.radians(90),
+                          math.radians(0)]
+    ur5.set_joint_angles(lst_joint_angles_blue)
     ur5.activate_gripper(False)
 
+    ur5.send_goal("home_use_joint_angles")
 
     del ur5
 
