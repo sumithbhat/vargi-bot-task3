@@ -1,4 +1,5 @@
 #! /usr/bin/env python
+
 import rospy
 import sys
 import copy
@@ -8,6 +9,8 @@ import moveit_msgs.msg
 import geometry_msgs.msg
 import actionlib
 import math
+
+from pkg_vb_sim.srv import *
 
 from pkg_task3.msg import myActionMsgAction
 from pkg_task3.msg import myActionMsgGoal
@@ -54,7 +57,25 @@ class SimpleActionServerUr5:
         self.ur5_2_home_pose.orientation.w = 0.5
 
         self.lst_joint_angles = [math.radians(6),
-                          math.radians(-139),
+                          math.radians(-137),
+                          math.radians(-63),
+                          math.radians(-66),
+                          math.radians(90),
+                          math.radians(0)]
+        self.lst_joint_angles_red = [math.radians(-80),
+                          math.radians(-120),
+                          math.radians(-63),
+                          math.radians(-66),
+                          math.radians(90),
+                          math.radians(0)]
+        self.lst_joint_angles_green = [math.radians(-10),
+                          math.radians(-45),
+                          math.radians(0),
+                          math.radians(0),
+                          math.radians(0),
+                          math.radians(0)]
+        self.lst_joint_angles_blue = [math.radians(90),
+                          math.radians(-120),
                           math.radians(-63),
                           math.radians(-66),
                           math.radians(90),
@@ -118,6 +139,14 @@ class SimpleActionServerUr5:
 
         return flag_plan
     
+    def activate_gripper(self, option):  # True or False
+        rospy.wait_for_service('/eyrc/vb/ur5_1/activate_vacuum_gripper')
+        gripper_service = rospy.ServiceProxy('/eyrc/vb/ur5_1/activate_vacuum_gripper',vacuumGripper)
+        gripper_obj = vacuumGripperRequest()
+        gripper_obj.activate_vacuum_gripper = option
+        result = gripper_service(gripper_obj)
+        print(result)
+    
 
     # Function to process Goals and send Results
     def func_on_rx_goal(self, obj_msg_goal):
@@ -131,6 +160,18 @@ class SimpleActionServerUr5:
         if(obj_msg_goal.destination == "home_use_pose"):
             self.go_to_pose(self.ur5_2_home_pose)
         elif(obj_msg_goal.destination == "home_use_joint_angles"):
+            self.set_joint_angles(self.lst_joint_angles)
+        elif(obj_msg_goal.destination == "red_basket_use_joint_angles"):
+            self.set_joint_angles(self.lst_joint_angles_red)
+            self.activate_gripper(False)
+            self.set_joint_angles(self.lst_joint_angles)
+        elif(obj_msg_goal.destination == "green_basket_use_joint_angles"):
+            self.set_joint_angles(self.lst_joint_angles_green)
+            self.activate_gripper(False)
+            self.set_joint_angles(self.lst_joint_angles)
+        elif(obj_msg_goal.destination == "blue_basket_use_joint_angles"):
+            self.set_joint_angles(self.lst_joint_angles_blue)
+            self.activate_gripper(False)
             self.set_joint_angles(self.lst_joint_angles)
 
         # Send Result to the Client
