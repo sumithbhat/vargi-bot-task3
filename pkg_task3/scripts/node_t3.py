@@ -201,7 +201,7 @@ class CartesianPath:
         return flag_plan
 
 
-    def conveyor_power(self, arg_power):  # {0, [11,100]}
+    def conveyor_power(self, arg_power):  # 0, 11-100
         rospy.wait_for_service('/eyrc/vb/conveyor/set_power')
         conveyor_service = rospy.ServiceProxy('/eyrc/vb/conveyor/set_power',conveyorBeltPowerMsg)
         conveyor_obj = conveyorBeltPowerMsgRequest()
@@ -210,7 +210,7 @@ class CartesianPath:
         print(result)
 
 
-    def activate_gripper(self, option):  # {True, False}
+    def activate_gripper(self, option):  # True or False
         rospy.wait_for_service('/eyrc/vb/ur5_1/activate_vacuum_gripper')
         gripper_service = rospy.ServiceProxy('/eyrc/vb/ur5_1/activate_vacuum_gripper',vacuumGripper)
         gripper_obj = vacuumGripperRequest()
@@ -245,7 +245,7 @@ def main():
 
     ur5.send_goal("home_use_joint_angles")
     rospy.sleep(5)
-    ur5.conveyor_power(60)
+    ur5.conveyor_power(70)
 
     while not rospy.is_shutdown():
         if(ur5.cam_y == 0.0):
@@ -255,27 +255,21 @@ def main():
     
     ur5.func_get_tf("ur5_wrist_3_link","logical_camera_2_packagen1_frame")
     ur5.ee_cartesian_translation(ur5.tf_offset_x, ur5.tf_offset_y, ur5.tf_offset_z)
-    ur5.goal_complete = False   
-    
-    ur5.activate_gripper(True)
-    # Go to Red Basket
-    lst_joint_angles_red = [math.radians(-75),
-                          math.radians(-120),
-                          math.radians(-63),
-                          math.radians(-66),
-                          math.radians(90),
-                          math.radians(0)]
-    ur5.set_joint_angles(lst_joint_angles_red)
-    ur5.activate_gripper(False)
+    ur5.goal_complete = False 
 
-    ur5.send_goal("home_use_joint_angles")
-    ur5.conveyor_power(60)
+    ur5.activate_gripper(True)
+    # Go to Red Basket and Back to Home
+    ur5.send_goal("red_basket_use_joint_angles")
+
+    rospy.sleep(1)
+    ur5.conveyor_power(40)
 
     while not rospy.is_shutdown():
         if(ur5.cam_y == 0.0):
             # Green package detected
             ur5.conveyor_power(0)
             break
+        
     while not rospy.is_shutdown():
         if(ur5.goal_complete == True):
             ur5.func_get_tf("ur5_wrist_3_link","logical_camera_2_packagen2_frame")
@@ -284,24 +278,18 @@ def main():
             break
     
     ur5.activate_gripper(True)
-    # Go to Green Basket
-    lst_joint_angles_green = [math.radians(-10),
-                          math.radians(-45),
-                          math.radians(0),
-                          math.radians(0),
-                          math.radians(0),
-                          math.radians(0)]
-    ur5.set_joint_angles(lst_joint_angles_green)
-    ur5.activate_gripper(False)
+    # Go to Green Basket and Back to Home
+    ur5.send_goal("green_basket_use_joint_angles")
 
-    ur5.send_goal("home_use_joint_angles")
-    ur5.conveyor_power(60)
+    rospy.sleep(1)
+    ur5.conveyor_power(40)
 
     while not rospy.is_shutdown():
         if(ur5.cam_y == 0.0):
             # Blue package detected
             ur5.conveyor_power(0)
             break
+        
     while not rospy.is_shutdown():
         if(ur5.goal_complete == True):
             ur5.func_get_tf("ur5_wrist_3_link","logical_camera_2_packagen3_frame")
@@ -310,17 +298,8 @@ def main():
             break
     
     ur5.activate_gripper(True)
-    # Go to Blue Basket
-    lst_joint_angles_blue = [math.radians(90),
-                          math.radians(-120),
-                          math.radians(-63),
-                          math.radians(-66),
-                          math.radians(90),
-                          math.radians(0)]
-    ur5.set_joint_angles(lst_joint_angles_blue)
-    ur5.activate_gripper(False)
-
-    ur5.send_goal("home_use_joint_angles")
+    # Go to Blue Basket and Back to Home
+    ur5.send_goal("blue_basket_use_joint_angles")
 
     del ur5
 
